@@ -41,7 +41,6 @@ class RoutesTestCase(TestCase):
         response = self.client.get(reverse("done"))
         self.assertEqual(response.status_code, 200)
 
-        # test note detail, edit, and delete routes
         note = self.create_note(user)
         response = self.client.get(reverse("note_detail", args=[note.slug]))
         self.assertEqual(response.status_code, 200)

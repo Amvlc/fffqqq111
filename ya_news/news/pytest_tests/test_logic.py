@@ -1,163 +1,180 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.exceptions import ValidationError
-
-from ya_news.news.models import Note
+from ya_news.news.models import News
 
 
 class LogicTestCase(TestCase):
     def setUp(self):
         self.user = self.create_user()
 
-    def test_authenticated_user_can_create_note(self):
+    def create_news(self, user, title="Test news", text="Test text"):
+        return News.objects.create(user=user, title=title, text=text)
+
+    def test_authenticated_user_can_create_news(self):
         self.client.force_login(self.user)
         response = self.client.post(
-            reverse("add_note"),
-            {"title": "Test note", "content": "Test content"},
+            reverse("add_news"),
+            {"title": "Test news", "text": "Test text"},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(Note.objects.filter(title="Test note").exists())
+        self.assertTrue(News.objects.filter(title="Test news").exists())
 
-    def test_anonymous_user_cannot_create_note(self):
+    def test_anonymous_user_cannot_create_news(self):
         response = self.client.post(
-            reverse("add_note"),
-            {"title": "Test note", "content": "Test content"},
+            reverse("add_news"),
+            {"title": "Test news", "text": "Test text"},
         )
         self.assertEqual(response.status_code, 302)
 
-    def test_unique_slug(self):
-        with self.assertRaises(ValidationError):
-            self.create_note(self.user, slug="test-slug")
-
-    def test_auto_slugify(self):
-        note = self.create_note(self.user, title="Test note")
-        self.assertTrue(note.slug)
-
-    def test_user_can_edit_own_note(self):
-        note = self.create_note(self.user)
+    def test_user_can_edit_own_news(self):
+        news = self.create_news(self.user)
         self.client.force_login(self.user)
         response = self.client.post(
-            reverse("edit_note", args=[note.slug]),
-            {"title": "Updated title", "content": "Updated content"},
+            reverse("edit_news", args=[news.id]),
+            {"title": "Updated title", "text": "Updated text"},
         )
         self.assertEqual(response.status_code, 302)
-        note.refresh_from_db()
-        self.assertEqual(note.title, "Updated title")
-        self.assertEqual(note.content, "Updated content")
+        news.refresh_from_db()
+        self.assertEqual(news.title, "Updated title")
+        self.assertEqual(news.text, "Updated text")
 
-    def test_user_cannot_edit_other_user_note(self):
+    def test_user_cannot_edit_other_user_news(self):
         user2 = self.create_user()
-        note = self.create_note(user2)
+        news = self.create_news(user2)
         self.client.force_login(self.user)
         response = self.client.post(
-            reverse("edit_note", args=[note.slug]),
-            {"title": "Updated title", "content": "Updated content"},
+            reverse("edit_news", args=[news.id]),
+            {"title": "Updated title", "text": "Updated text"},
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_user_can_delete_own_note(self):
-        note = self.create_note(self.user)
+    def test_user_can_delete_own_news(self):
+        news = self.create_news(self.user)
         self.client.force_login(self.user)
-        response = self.client.post(reverse("delete_note", args=[note.slug]))
-        self.assertEqual(response.status_code, 302)  # redirect to done page
-        with self.assertRaises(ObjectDoesNotExist):
-            Note.objects.get(slug=note.slug)
-
-    def test_user_cannot_delete_other_user_note(self):
-        user2 = self.create_user()
-        note = self.create_note(user2)
-        self.client.force_login(self.user)
-        response = self.client.post(reverse("delete_note", args=[note.slug]))
-        self.assertEqual(response.status_code, 404)
-
-    def test_note_creation_with_empty_title(self):
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("add_note"), {"title": "", "content": "Test content"}
-        )
-        self.assertEqual(response.status_code, 200)  # form validation error
-        self.assertFalse(Note.objects.filter(content="Test content").exists())
-
-    def test_note_creation_with_empty_content(self):
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("add_note"), {"title": "Test note", "content": ""}
-        )
-        self.assertEqual(response.status_code, 200)  # form validation error
-        self.assertFalse(Note.objects.filter(title="Test note").exists())
-
-    def test_note_editing_with_empty_title(self):
-        note = self.create_note(self.user)
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("edit_note", args=[note.slug]),
-            {"title": "", "content": "Updated content"},
-        )
-        self.assertEqual(response.status_code, 200)
-        note.refresh_from_db()
-        self.assertNotEqual(note.title, "")
-
-    def test_note_editing_with_empty_content(self):
-        note = self.create_note(self.user)
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("edit_note", args=[note.slug]),
-            {"title": "Updated title", "content": ""},
-        )
-        self.assertEqual(response.status_code, 200)
-        note.refresh_from_db()
-        self.assertNotEqual(note.content, "")
-
-    def test_note_slug_is_unique(self):
-        note1 = self.create_note(self.user, title="Test note 1")
-        note2 = self.create_note(self.user, title="Test note 2")
-        self.assertNotEqual(note1.slug, note2.slug)
-
-    def test_note_slug_is_autogenerated(self):
-        note = self.create_note(self.user, title="Test note")
-        self.assertTrue(note.slug)
-
-    def test_note_title_is_required(self):
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("add_note"), {"title": "", "content": "Test content"}
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Note.objects.filter(content="Test content").exists())
-
-    def test_note_content_is_required(self):
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("add_note"), {"title": "Test note", "content": ""}
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Note.objects.filter(title="Test note").exists())
-
-    def test_note_editing_requires_login(self):
-        note = self.create_note(self.user)
-        response = self.client.post(
-            reverse("edit_note", args=[note.slug]),
-            {"title": "Updated title", "content": "Updated content"},
-        )
-        self.assertEqual(response.status_code, 302)
-
-    def test_note_deletion_requires_login(self):
-        note = self.create_note(self.user)
-        response = self.client.post(reverse("delete_note", args=[note.slug]))
-        self.assertEqual(response.status_code, 302)
-
-    def test_note_deletion_by_owner(self):
-        note = self.create_note(self.user)
-        self.client.force_login(self.user)
-        response = self.client.post(reverse("delete_note", args=[note.slug]))
+        response = self.client.post(reverse("delete_news", args=[news.id]))
         self.assertEqual(response.status_code, 302)
         with self.assertRaises(ObjectDoesNotExist):
-            Note.objects.get(slug=note.slug)
+            News.objects.get(id=news.id)
 
-    def test_note_deletion_by_non_owner(self):
+    def test_user_cannot_delete_other_user_news(self):
         user2 = self.create_user()
-        note = self.create_note(user2)
+        news = self.create_news(user2)
         self.client.force_login(self.user)
-        response = self.client.post(reverse("delete_note", args=[note.slug]))
+        response = self.client.post(reverse("delete_news", args=[news.id]))
         self.assertEqual(response.status_code, 404)
+
+    def test_news_creation_with_empty_title(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("add_news"), {"title": "", "text": "Test text"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(News.objects.filter(text="Test text").exists())
+
+    def test_news_creation_with_empty_text(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("add_news"), {"title": "Test news", "text": ""}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(News.objects.filter(title="Test news").exists())
+
+    def test_news_editing_with_empty_title(self):
+        news = self.create_news(self.user)
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("edit_news", args=[news.id]),
+            {"title": "", "text": "Updated text"},
+        )
+        self.assertEqual(response.status_code, 200)
+        news.refresh_from_db()
+        self.assertNotEqual(news.title, "")
+
+    def test_news_editing_with_empty_text(self):
+        news = self.create_news(self.user)
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("edit_news", args=[news.id]),
+            {"title": "Updated title", "text": ""},
+        )
+        self.assertEqual(response.status_code, 200)
+        news.refresh_from_db()
+        self.assertNotEqual(news.text, "")
+
+    def test_news_title_is_required(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("add_news"), {"title": "", "text": "Test text"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(News.objects.filter(text="Test text").exists())
+
+    def test_news_text_is_required(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("add_news"), {"title": "Test news", "text": ""}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(News.objects.filter(title="Test news").exists())
+
+    def test_news_editing_requires_login(self):
+        news = self.create_news(self.user)
+        response = self.client.post(
+            reverse("edit_news", args=[news.id]),
+            {"title": "Updated title", "text": "Updated text"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_news_deletion_requires_login(self):
+        news = self.create_news(self.user)
+        response = self.client.post(reverse("delete_news", args=[news.id]))
+        self.assertEqual(response.status_code, 302)
+
+    def test_news_deletion_by_owner(self):
+        news = self.create_news(self.user)
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("delete_news", args=[news.id]))
+        self.assertEqual(response.status_code, 302)
+        with self.assertRaises(ObjectDoesNotExist):
+            News.objects.get(id=news.id)
+
+    def test_news_deletion_by_non_owner(self):
+        user2 = self.create_user()
+        news = self.create_news(user2)
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("delete_news", args=[news.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def create_user(self):
+        # создание пользователя
+        pass
+
+    def test_news_creation(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("add_news"),
+            {"title": "Test news", "text": "Test text"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(News.objects.filter(title="Test news").exists())
+
+    def test_news_editing(self):
+        news = self.create_news(self.user)
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("edit_news", args=[news.id]),
+            {"title": "Updated title", "text": "Updated text"},
+        )
+        self.assertEqual(response.status_code, 302)
+        news.refresh_from_db()
+        self.assertEqual(news.title, "Updated title")
+        self.assertEqual(news.text, "Updated text")
+
+    def test_news_deletion(self):
+        news = self.create_news(self.user)
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("delete_news", args=[news.id]))
+        self.assertEqual(response.status_code, 302)
+        with self.assertRaises(ObjectDoesNotExist):
+            News.objects.get(id=news.id)
