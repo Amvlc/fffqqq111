@@ -1,8 +1,9 @@
 from django.test import TestCase
-from news.models import Note
 from django.urls import reverse
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError
+
+from ya_news.news.models import Note
 
 
 class LogicTestCase(TestCase):
