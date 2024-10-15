@@ -1,7 +1,8 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.core.exceptions import ObjectDoesNotExist
-from ya_news.news.models import News
+from news.models import News
+from django.contrib.auth.models import User
 
 
 class LogicTestCase(TestCase):
@@ -147,8 +148,7 @@ class LogicTestCase(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def create_user(self):
-        # создание пользователя
-        pass
+        return User.objects.create_user(username='testuser', password='12345')
 
     def test_news_creation(self):
         self.client.force_login(self.user)
